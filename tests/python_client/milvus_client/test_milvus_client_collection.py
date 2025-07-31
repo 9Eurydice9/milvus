@@ -270,6 +270,47 @@ class TestMilvusClientCollectionInvalid(TestMilvusClientV2Base):
                                check_task=CheckTasks.err_res, check_items=error)
 
 
+    @pytest.mark.tags(CaseLabel.L0)
+    def test_milvus_client_collection_without_vectors(self):
+        """
+        target: test create collection without vectors
+        method: create collection only with int field
+        expected: raise exception
+        """
+        client = self._client()
+        collection_name = cf.gen_collection_name_by_testcase_name()
+        # Create schema with only non-vector fields
+        schema = self.create_schema(client, enable_dynamic_field=False)[0]
+        schema.add_field("int_field", DataType.INT64, is_primary=True, auto_id=False)
+        error = {ct.err_code: 1100, ct.err_msg: "schema does not contain vector field: invalid parameter"}
+        self.create_collection(client, collection_name, schema=schema,
+                               check_task=CheckTasks.err_res, check_items=error)
+
+    @pytest.mark.tags(CaseLabel.L1)
+    @pytest.mark.parametrize("vector_type", [DataType.FLOAT_VECTOR, DataType.INT8_VECTOR, DataType.BINARY_VECTOR])
+    def test_milvus_client_collection_without_primary_field(self, vector_type):
+        """
+        target: test create collection without primary field
+        method: no primary field specified in collection schema and fields
+        expected: raise exception
+        """
+        client = self._client()
+        collection_name = cf.gen_collection_name_by_testcase_name()
+        # Create schema with fields but no primary key
+        schema1 = self.create_schema(client, enable_dynamic_field=False)[0]
+        schema1.add_field("int_field", DataType.INT64)  # Not primary
+        schema1.add_field("vector_field", vector_type, dim=default_dim)
+        error = {ct.err_code: 1100, ct.err_msg: "Schema must have a primary key field"}
+        self.create_collection(client, collection_name, schema=schema1,
+                               check_task=CheckTasks.err_res, check_items=error)
+        # Create schema with only vector field
+        schema2 = self.create_schema(client, enable_dynamic_field=False)[0]
+        schema2.add_field("vector_field", vector_type, dim=default_dim)
+        error = {ct.err_code: 1100, ct.err_msg: "Schema must have a primary key field"}
+        self.create_collection(client, collection_name, schema=schema2,
+                               check_task=CheckTasks.err_res, check_items=error)
+
+
     @pytest.mark.tags(CaseLabel.L1)
     def test_milvus_client_collection_dup_field(self):
         """
@@ -1377,7 +1418,6 @@ class TestMilvusClientLoadCollectionValid(TestMilvusClientV2Base):
     @pytest.fixture(scope="function", params=["int", "string"])
     def id_type(self, request):
         yield request.param
-
 
     @pytest.mark.tags(CaseLabel.L2)
     def test_milvus_client_load_loaded_collection(self):
